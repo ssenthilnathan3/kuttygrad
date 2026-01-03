@@ -1,4 +1,4 @@
-from typing import Literal, TypeVar
+from typing import Any, Literal, TypeVar
 
 import numpy as np
 from typing_extensions import assert_never
@@ -11,6 +11,9 @@ T = TypeVar("T", bound="Tensor")
 
 
 class Tensor:
+    _op: Any | None
+    _inputs: Any | None
+
     def __init__(
         self,
         data: list | ScalarType | NDArray | "Tensor",
@@ -30,6 +33,8 @@ class Tensor:
 
         self._device: Literal["cpu", "gpu"] = device or "cpu"
         self.requires_grad = requires_grad
+        self._op = None
+        self._inputs = None
 
     @classmethod
     def from_data(cls, data, *, device=None, dtype="float32", requires_grad=True):
@@ -52,6 +57,50 @@ class Tensor:
             [1. 2. 3.]
         """
         return str(self.data)
+
+    def __add__(self, other):
+        """Addition: a + b"""
+        from .ops import Add
+
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        return Add()(self, other)
+
+    def __radd__(self, other):
+        """Right addition: 5 + tensor"""
+        return self.__add__(other)
+
+    def __mul__(self, other):
+        """Multiplication: a * b"""
+        from .ops import Mul
+
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        return Mul()(self, other)
+
+    def __rmul__(self, other):
+        """Right multiplication: 5 * tensor"""
+        return self.__mul__(other)
+
+    def __pow__(self, other):
+        """Power: base ** exponent"""
+        from .ops import Pow
+
+        return Pow()(self, other)
+
+    def __rpow__(self, other):
+        """Right power: 5 ** tensor"""
+        return self.__pow__(other)
+
+    # def __pow__(self, other):
+    #     """Power: base ** exponent"""
+    #     from .ops import Pow
+
+    #     return Pow()(self, other)
+
+    # def __rpow__(self, other):
+    #     """Right power: 5 ** tensor"""
+    #     return self.__pow__(other)
 
     @property
     def shape(self):
