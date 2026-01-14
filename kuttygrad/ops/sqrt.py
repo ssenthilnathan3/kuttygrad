@@ -14,5 +14,5 @@ class Sqrt(Function):
 
     @override
     def backward(self, *args):
-        out_grad = args[0]
-        return out_grad * (1 / (2 * self.x))
+        (out_grad,) = args
+        return (out_grad * (1 / (2 * self.x)),)

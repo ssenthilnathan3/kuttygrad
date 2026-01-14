@@ -8,12 +8,11 @@ class Function:
 
         output_data = self.forward(*inputs_data)
 
-        # wrap the output in tensor
         output_tensor = Tensor.from_data(data=output_data, requires_grad=requires_grad)
 
         if requires_grad:
             output_tensor._op = self
-            output_tensor._inputs = inputs_data
+            output_tensor._inputs = inputs
 
         return output_tensor
 

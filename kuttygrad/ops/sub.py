@@ -13,7 +13,7 @@ class Sub(Function):
 
     @override
     def backward(self, *args):
-        out_grad, out_grad = args
+        (out_grad,) = args
         return out_grad, -out_grad
 
 

@@ -9,12 +9,13 @@ class TanH(Function):
     @override
     def forward(self, *args: NDArray) -> NDArray:
         x = args[0]
-        return numpy.tanh(x)
+        self.y = numpy.tanh(x)
+        return self.y
 
     @override
     def backward(self, *args):
-        out_grad, node = args
-        return out_grad, node
+        (out_grad,) = args
+        return (out_grad * (1 - self.y**2),)
 
 
 def tanh(a: NDArray):

@@ -1,4 +1,7 @@
-from typing import Any, Literal, TypeVar
+from __future__ import annotations
+
+from numbers import Number
+from typing import Any, Literal, Optional, TypeVar
 
 import numpy as np
 from typing_extensions import assert_never
@@ -26,10 +29,12 @@ class Tensor:
             self.data: NDArray = data.data
         elif isinstance(data, NDArray):
             self.data = data
-        elif isinstance(data, list) or isinstance(data, ScalarType):
+        elif isinstance(data, (list, tuple)):
+            self.data = np.array(data)
+        elif isinstance(data, Number):
             self.data = np.array(data)
         else:
-            assert_never(data)
+            raise TypeError(f"unsupported type for Tensor: {type(data)}")
 
         self._device: Literal["cpu", "gpu"] = device or "cpu"
         self.requires_grad = requires_grad
@@ -86,21 +91,91 @@ class Tensor:
         """Power: base ** exponent"""
         from .ops import Pow
 
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
         return Pow()(self, other)
 
     def __rpow__(self, other):
         """Right power: 5 ** tensor"""
-        return self.__pow__(other)
+        from .ops import Pow
 
-    # def __pow__(self, other):
-    #     """Power: base ** exponent"""
-    #     from .ops import Pow
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        # other is the base, self is the exponent
+        return Pow()(other, self)
 
-    #     return Pow()(self, other)
+    def __sub__(self, other):
+        """Subtraction: a - b"""
+        from .ops import Sub
 
-    # def __rpow__(self, other):
-    #     """Right power: 5 ** tensor"""
-    #     return self.__pow__(other)
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        return Sub()(self, other)
+
+    def __rsub__(self, other):
+        """Right subtraction: 5 - tensor"""
+        from .ops import Sub
+
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        return Sub()(other, self)
+
+    def __truediv__(self, other):
+        """Division: a / b"""
+
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        return self * (other**-1)
+
+    def __rtruediv__(self, other):
+        """Right division: 5 / tensor"""
+        return self.__truediv__(other)
+
+    def __matmul__(self, other):
+        """Matrix multiplication: a @ b"""
+        from .ops import MatMul
+
+        if not isinstance(other, Tensor):
+            other = Tensor(other)
+        return MatMul()(self, other)
+
+    def __rmatmul__(self, other):
+        """Right matrix multiplication: array @ tensor"""
+        return self.__matmul__(other)
+
+    def matmul(self, other):
+        """Matrix multiplication method: a.matmul(b)"""
+        return self.__matmul__(other)
+
+    def sum(self, axes: Optional[tuple] | None = None):
+        """Sum of tensor elements along specified axis"""
+        from .ops import Summation
+
+        return Summation(axes)(self)
+
+    def broadcast_to(self, shape: tuple):
+        """Broadcast tensor to specified shape"""
+        from .ops import BroadcastTo
+
+        return BroadcastTo(shape)(self)
+
+    def reshape(self, shape: tuple):
+        """Reshape tensor to specified shape"""
+        from .ops import Reshape
+
+        return Reshape(shape)(self)
+
+    def __neg__(self):
+        """Negation: -tensor"""
+        from .ops import Negate
+
+        return Negate()(self)
+
+    def transpose(self, axes: Optional[tuple] | None = None):
+        """Transpose tensor"""
+        from .ops import Transpose
+
+        return Transpose(axes)(self)
 
     @property
     def shape(self):
@@ -155,5 +230,89 @@ class Tensor:
         """
         return Tensor(self.data, requires_grad=False)
 
-    def backward(self, out_grad=None):
-        pass
+    def backward(self, grad=None):
+        """
+        Compute gradients for all tensors in the computation graph that
+        leads to `self` and store them on each tensor's `.grad` attribute.
+
+        Notes:
+        - We pass raw numpy arrays (NDArray) to each operation's `backward`
+          implementation so operations can use NumPy directly.
+        - All gradients stored in the intermediate `grads` dict are `Tensor`
+          instances with `requires_grad=False` to avoid building new graph
+          nodes during backpropagation.
+        - Each `backward` implementation should return a tuple/list with one
+          entry per input (use `None` for inputs that don't require a gradient).
+        """
+        grads = {}
+
+        # seed gradient (as a Tensor without gradient tracking)
+        if grad is None:
+            grads[self] = Tensor(np.ones_like(self.data), requires_grad=False)
+        else:
+            # normalize user-provided gradient into a Tensor (no grad tracking)
+            if isinstance(grad, Tensor):
+                if grad.requires_grad:
+                    grads[self] = Tensor(grad.data, requires_grad=False)
+                else:
+                    grads[self] = grad
+            else:
+                grads[self] = Tensor(grad, requires_grad=False)
+
+        topo_order = []
+        visited = set()
+
+        def build_topo(node):
+            if node in visited:
+                return
+            visited.add(node)
+
+            if node._inputs is not None:
+                for parent in node._inputs:
+                    build_topo(parent)
+
+            topo_order.append(node)
+
+        build_topo(self)
+
+        # reverse topo for backprop
+        for node in reversed(topo_order):
+            out_grad = grads.get(node)
+            if out_grad is None:
+                continue
+
+            # leaf nodes have no backward
+            if node._op is None:
+                continue
+
+            # pass a numpy array (NDArray) to op.backward
+            out_grad_arr = out_grad.data if isinstance(out_grad, Tensor) else out_grad
+
+            parent_grads = node._op.backward(out_grad_arr)
+
+            # normalize single-array returns to a tuple/list
+            if not isinstance(parent_grads, (tuple, list)):
+                parent_grads = (parent_grads,)
+
+            # distribute grads to parents
+            for parent, g in zip(node._inputs, parent_grads):
+                if g is None:
+                    continue
+
+                # normalize gradients into Tensor objects (no grad tracking)
+                if isinstance(g, Tensor):
+                    if g.requires_grad:
+                        g_tensor = Tensor(g.data, requires_grad=False)
+                    else:
+                        g_tensor = g
+                else:
+                    g_tensor = Tensor(g, requires_grad=False)
+
+                if parent in grads:
+                    grads[parent] = grads[parent] + g_tensor
+                else:
+                    grads[parent] = g_tensor
+
+        # store .grad (leave as Tensor with requires_grad=False)
+        for node, g in grads.items():
+            node.grad = g

@@ -1,3 +1,4 @@
+import numpy
 from typing_extensions import override
 
 from kuttygrad.function import Function
@@ -14,6 +15,13 @@ class Pow(Function):
 
     @override
     def backward(self, *args):
-        out_grad = args[0]
+        (out_grad,) = args
+
+        # gradient w.r.t. base: exponent * base^(exponent - 1)
         base_grad = self.exponent * (self.base ** (self.exponent - 1))
-        return base_grad * out_grad
+
+        # gradient w.r.t. exponent: base^exponent * log(base)
+        # Note: this will be NaN if base <= 0 for non-integer exponents.
+        exponent_grad = (self.base**self.exponent) * numpy.log(self.base)
+
+        return base_grad * out_grad, exponent_grad * out_grad

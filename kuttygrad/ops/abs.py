@@ -14,5 +14,6 @@ class Abs(Function):
 
     @override
     def backward(self, *args):
-        out_grad = args[0]
-        return -out_grad
+        (out_grad,) = args
+        # derivative of abs(x) is sign(x); define derivative at x=0 as 0
+        return (out_grad * numpy.sign(self.x),)

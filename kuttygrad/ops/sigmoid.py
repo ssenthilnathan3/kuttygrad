@@ -9,12 +9,14 @@ class Sigmoid(Function):
     @override
     def forward(self, *args: NDArray) -> NDArray:
         x = args[0]
-        return 1 / (1 + numpy.exp(-x))
+        self.x = x
+        self.y = 1 / (1 + numpy.exp(-x))
+        return self.y
 
     @override
     def backward(self, *args):
-        out_grad, node = args
-        return out_grad, node
+        (out_grad,) = args
+        return (out_grad * self.y * (1 - self.y),)
 
 
 def sigmoid(a: NDArray):

@@ -1,18 +1,19 @@
-import numpy
 from typing_extensions import override
 
 from kuttygrad.function import Function
 from kuttygrad.tensor import NDArray
 
 
-class Log(Function):
+class AddScalar(Function):
+    def __init__(self, scalar):
+        self.scalar = scalar
+
     @override
-    def forward(self, *args: NDArray) -> NDArray:
-        x = args[0]
-        self.x = x
-        return numpy.log(x)
+    def forward(self, *args: NDArray):
+        (a,) = args
+        return a + self.scalar
 
     @override
     def backward(self, *args):
         (out_grad,) = args
-        return (out_grad / self.x,)
+        return (out_grad,)

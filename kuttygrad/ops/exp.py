@@ -9,12 +9,15 @@ class Exp(Function):
     @override
     def forward(self, *args: NDArray) -> NDArray:
         x = args[0]
-        return numpy.exp(x)
+        # cache the forward result so backward can reuse it
+        self.y = numpy.exp(x)
+        return self.y
 
     @override
     def backward(self, *args):
-        out_grad = args[0]
-        return out_grad, None
+        (out_grad,) = args
+        # derivative of exp(x) is exp(x); return as a single-element tuple
+        return (out_grad * self.y,)
 
 
 def exp(a: NDArray):

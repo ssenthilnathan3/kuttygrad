@@ -14,5 +14,9 @@ class Mul(Function):
 
     @override
     def backward(self, *args):
-        out_grad, out_grad = args
-        return self.a * out_grad, self.b * out_grad
+        (out_grad,) = args
+
+        grad_a = out_grad * self.b
+        grad_b = out_grad * self.a
+
+        return grad_a, grad_b
